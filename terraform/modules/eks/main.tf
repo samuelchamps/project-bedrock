@@ -81,6 +81,14 @@ resource "aws_eks_cluster" "this" {
   role_arn = aws_iam_role.eks_cluster.arn
   version  = var.kubernetes_version
 
+  enabled_cluster_log_types = [
+  "api",
+  "audit",
+  "authenticator",
+  "controllerManager",
+  "scheduler"
+]
+
   access_config {
     authentication_mode = "API_AND_CONFIG_MAP"
   }
@@ -158,5 +166,16 @@ resource "aws_eks_access_policy_association" "admin" {
 
   depends_on = [
     aws_eks_access_entry.admin
+  ]
+}
+resource "aws_eks_addon" "cloudwatch_observability" {
+  cluster_name = aws_eks_cluster.this.name
+  addon_name   = "amazon-cloudwatch-observability"
+
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [
+    aws_eks_node_group.this
   ]
 }
