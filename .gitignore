@@ -1,0 +1,25 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Terraform variable files
+*.tfvars
+*.tfvars.json
+
+# Terraform lock file generated in child modules
+# Keep the provider lock file if committed intentionally.
+
+# Secrets
+.env
+*.pem
+*.key
+credentials
+credentials.*
+
+# OS files
+.DS_Store
+Thumbs.db
