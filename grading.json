@@ -1,0 +1,42 @@
+{
+  "carts_table_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "project-bedrock-carts"
+  },
+  "catalog_rds_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "project-bedrock-catalog-mysql.c4rkkw484tfv.us-east-1.rds.amazonaws.com"
+  },
+  "eks_cluster_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "https://DD5609D272EB553895A84D33555AD74C.gr7.us-east-1.eks.amazonaws.com"
+  },
+  "eks_cluster_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "project-bedrock-cluster"
+  },
+  "eks_cluster_version": {
+    "sensitive": false,
+    "type": "string",
+    "value": "1.33"
+  },
+  "eks_node_group_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "project-bedrock-node-group"
+  },
+  "orders_rds_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "project-bedrock-orders-postgres.c4rkkw484tfv.us-east-1.rds.amazonaws.com"
+  },
+  "vpc_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "vpc-0c192950d0f58920c"
+  }
+}
