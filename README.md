@@ -1,67 +1,73 @@
-# Project Bedrock – EKS Retail Store Application
+# Project Bedrock – InnovateMart EKS Deployment
 
 ## Overview
 
-Project Bedrock is an Amazon EKS deployment of the Retail Store sample
-application. The application is deployed to Kubernetes and exposed
-externally using an AWS Application Load Balancer (ALB) through the AWS
-Load Balancer Controller.
+Project Bedrock is a production-oriented Amazon EKS deployment for InnovateMart's Retail Store microservices application.
 
-The project demonstrates Kubernetes application deployment, AWS
-integration, IAM permissions, EKS Pod Identity, Kubernetes Ingress, and
-ALB target management.
+The infrastructure is provisioned with Terraform in AWS Region `us-east-1`. The application runs in the `retail-app` Kubernetes namespace and uses managed AWS services for its persistent data layer.
+
+## Project Standards
+
+| Requirement | Configuration |
+|---|---|
+| AWS Region | `us-east-1` |
+| EKS Cluster | `project-bedrock-cluster` |
+| VPC | `project-bedrock-vpc` |
+| Kubernetes Namespace | `retail-app` |
+| Developer IAM User | `bedrock-dev-view` |
+| S3 Assets Bucket | `bedrock-assets-alt-soe-tin-025-0048` |
+| Lambda Function | `bedrock-asset-processor` |
+| Project Tag | `Project: tinyuka-2025-capstone` |
 
 ---
 
 ## Architecture
 
-The traffic flow is:
+The solution consists of:
 
-User
-↓
-Internet-facing Application Load Balancer
-↓
-Kubernetes Ingress
-↓
-UI Service
-↓
-UI Pods
-
-The application also contains a Catalog service used by the Retail Store
-application.
-
----
-
-## AWS Resources
-
-The project uses:
-
-- Amazon EKS
-- Amazon EC2 worker nodes
-- Amazon VPC
+- Amazon VPC spanning two Availability Zones
+- Public and private subnets
+- Single NAT Gateway for cost control
+- Amazon EKS cluster
+- Two EKS worker nodes
+- AWS Load Balancer Controller
 - Internet-facing Application Load Balancer
-- Elastic Load Balancing
-- IAM
-- EKS Pod Identity
-- Kubernetes Ingress
-- Kubernetes Services
-- Kubernetes Deployments
+- Retail Store microservices in the `retail-app` namespace
+- Amazon RDS MySQL for Catalog
+- Amazon RDS PostgreSQL for Orders
+- Amazon DynamoDB for Carts
+- RabbitMQ running inside EKS
+- Amazon S3 for product assets
+- AWS Lambda for S3 event processing
+- Amazon CloudWatch for logging
+- IAM developer access using EKS Access Entries
+- Terraform remote state stored in S3 with native state locking
+
+See the architecture diagram included with the project documentation.
 
 ---
 
-## Kubernetes Components
+## Infrastructure as Code
 
-The Retail Store application is deployed using Kustomize.
+Terraform is used to provision and manage the AWS infrastructure.
 
-Application configuration:
+The Terraform configuration is located in:
 
 ```text
-kubernetes/
-└── retail-app/
-    ├── base/
-    │   ├── catalog.yaml
-    │   ├── ui.yaml
-    │   ├── ingress.yaml
-    │   └── kustomization.yaml
-    └── overlays/
-        └── production/
+terraform/
+├── backend.tf
+├── budget.tf
+├── database.tf
+├── dynamodb.tf
+├── iam.tf
+├── lambda.tf
+├── locals.tf
+├── main.tf
+├── outputs.tf
+├── providers.tf
+├── rds.tf
+├── s3.tf
+├── variables.tf
+├── versions.tf
+├── lambda/
+└── modules/
