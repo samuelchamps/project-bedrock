@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - catalog.yaml
   - ui.yaml
+  - ingress.yaml
