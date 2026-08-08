@@ -35,3 +35,7 @@ output "carts_table_name" {
   description = "DynamoDB table used by the Carts service."
   value       = aws_dynamodb_table.carts.name
 }
+output "assets_bucket_name" {
+  description = "Name of the S3 assets bucket"
+  value       = aws_s3_bucket.assets.bucket
+}
