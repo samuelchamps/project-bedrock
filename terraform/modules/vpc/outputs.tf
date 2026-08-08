@@ -27,3 +27,7 @@ output "nat_gateway_id" {
   description = "ID of the single NAT Gateway."
   value       = aws_nat_gateway.this.id
 }
+output "private_subnet_cidrs" {
+  description = "CIDR blocks of the private subnets."
+  value       = var.private_subnet_cidrs
+}
