@@ -76,6 +76,11 @@ resource "aws_iam_role_policy_attachment" "eks_ecr_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_server_policy" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
 resource "aws_eks_cluster" "this" {
   name     = "${var.project_name}-cluster"
   role_arn = aws_iam_role.eks_cluster.arn
@@ -178,4 +183,22 @@ resource "aws_eks_addon" "cloudwatch_observability" {
   depends_on = [
     aws_eks_node_group.this
   ]
+}
+resource "aws_iam_role_policy" "eks_xray" {
+  name = "${var.project_name}-eks-xray-policy"
+  role = aws_iam_role.eks_nodes.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "xray:PutTraceSegments",
+          "xray:PutTelemetryRecords"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
