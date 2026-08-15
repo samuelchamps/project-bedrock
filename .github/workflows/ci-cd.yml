@@ -13,6 +13,10 @@ permissions:
   pull-requests: write
   id-token: write
 
+concurrency:
+  group: project-bedrock-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   terraform:
     name: Terraform
@@ -29,12 +33,15 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6
         with:
+          role-to-assume: arn:aws:iam::163841615330:role/ProjectBedrockGitHubActionsRole
           aws-region: us-east-1
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-session-name: ProjectBedrockGitHubActions
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
