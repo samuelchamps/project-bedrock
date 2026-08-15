@@ -74,16 +74,17 @@ configMap:
 
 app:
   persistence:
-    provider: in-memory
-    endpoint: ""
+    provider: mysql
+    endpoint: "project-bedrock-catalog-mysql.c4rkkw484tfv.us-east-1.rds.amazonaws.com:3306"
     database: "catalog"
 
     secret:
       create: true
       name: catalog-db
-      username: catalog
+      username: catalogadmin
       password: ""
-  
+
+
   search:
     enabled: false
     provider: self-hosted

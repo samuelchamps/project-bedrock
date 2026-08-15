@@ -1,0 +1,26 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Terraform local/recovery files
+current-state.json
+current-plan.txt
+rebuild-plan.txt
+restored-state.json
+restored-state-backup.json
+terraform-state-recovered-backup.json
+
+# Secrets / local credentials
+*.pem
+*.key
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
