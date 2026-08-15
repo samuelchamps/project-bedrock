@@ -1,0 +1,23 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+
+# Environment / secrets
+.env
+.env.*
+
+# Private keys
+*.pem
+*.key
+
+# Grading output
+grading.json
+
+# OS files
+.DS_Store
+Thumbs.db
