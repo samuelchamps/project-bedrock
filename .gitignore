@@ -22,4 +22,5 @@ credentials.*
 
 # OS files
 .DS_Store
-Thumbs.dbgithub-actions-trust-policy.json
+Thumbs.db
+github-actions-trust-policy.json
