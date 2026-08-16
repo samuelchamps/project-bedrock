@@ -93,9 +93,49 @@ jobs:
       - name: Configure kubectl
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
+          set -e
+
           aws eks update-kubeconfig \
             --region us-east-1 \
             --name project-bedrock-cluster
+
+          echo "Waiting for EKS API authentication to become available..."
+
+          for i in {1..30}; do
+            echo "Authentication attempt $i/30"
+
+            if aws eks get-token \
+              --region us-east-1 \
+              --cluster-name project-bedrock-cluster >/tmp/eks-token.json 2>/tmp/eks-token-error; then
+
+              if kubectl get --raw=/version >/tmp/eks-version.json 2>/tmp/kubectl-error; then
+                echo "EKS authentication successful."
+                cat /tmp/eks-version.json
+                break
+              fi
+            fi
+
+            cat /tmp/eks-token-error 2>/dev/null || true
+            cat /tmp/kubectl-error 2>/dev/null || true
+
+            if [ "$i" -eq 30 ]; then
+              echo "EKS authentication failed after 30 attempts."
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          echo "Current AWS identity:"
+          aws sts get-caller-identity
+
+          echo "EKS access entries:"
+          aws eks list-access-entries \
+            --cluster-name project-bedrock-cluster \
+            --region us-east-1
+
+          echo "Kubernetes authentication:"
+          kubectl auth can-i create serviceaccounts -n kube-system
 
       - name: Install AWS Load Balancer Controller
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
