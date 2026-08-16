@@ -140,34 +140,147 @@ jobs:
       - name: Install AWS Load Balancer Controller
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
+          set -e
+
+          CLUSTER_NAME="project-bedrock-cluster"
+          REGION="us-east-1"
+
+          echo "========================================"
+          echo "AWS LOAD BALANCER CONTROLLER"
+          echo "========================================"
+
+          VPC_ID=$(aws eks describe-cluster \
+            --name "$CLUSTER_NAME" \
+            --region "$REGION" \
+            --query 'cluster.resourcesVpcConfig.vpcId' \
+            --output text)
+
+          echo "Cluster: $CLUSTER_NAME"
+          echo "Region:  $REGION"
+          echo "VPC ID:  $VPC_ID"
+
+          echo
+          echo "========================================"
+          echo "SERVICE ACCOUNT"
+          echo "========================================"
+
           kubectl create serviceaccount aws-load-balancer-controller \
             -n kube-system \
             --dry-run=client \
             -o yaml | kubectl apply -f -
 
+          kubectl get serviceaccount \
+            aws-load-balancer-controller \
+            -n kube-system \
+            -o yaml
+
+          echo
+          echo "========================================"
+          echo "POD IDENTITY"
+          echo "========================================"
+
+          aws eks list-pod-identity-associations \
+            --cluster-name "$CLUSTER_NAME" \
+            --region "$REGION"
+
+          echo
+          echo "========================================"
+          echo "HELM REPOSITORY"
+          echo "========================================"
+
           helm repo add eks https://aws.github.io/eks-charts
           helm repo update eks
+
+          echo
+          echo "========================================"
+          echo "INSTALL / UPGRADE CONTROLLER"
+          echo "========================================"
+
+          set +e
 
           helm upgrade --install aws-load-balancer-controller \
             eks/aws-load-balancer-controller \
             --namespace kube-system \
-            --set clusterName=project-bedrock-cluster \
+            --set clusterName="$CLUSTER_NAME" \
+            --set region="$REGION" \
+            --set vpcId="$VPC_ID" \
             --set serviceAccount.create=false \
             --set serviceAccount.name=aws-load-balancer-controller \
-            --version 1.14.0 \
             --wait \
             --timeout 10m
 
-      - name: Verify Load Balancer Controller
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: |
-          kubectl rollout status \
-            deployment/aws-load-balancer-controller \
+          HELM_EXIT=$?
+
+          set -e
+
+          echo
+          echo "========================================"
+          echo "CONTROLLER DEPLOYMENT"
+          echo "========================================"
+
+          kubectl get deployment \
+            aws-load-balancer-controller \
             -n kube-system \
-            --timeout=5m
+            -o wide || true
+
+          echo
+          echo "========================================"
+          echo "CONTROLLER PODS"
+          echo "========================================"
+
+          kubectl get pods \
+            -n kube-system \
+            -l app.kubernetes.io/name=aws-load-balancer-controller \
+            -o wide || true
+
+          echo
+          echo "========================================"
+          echo "POD DESCRIPTIONS"
+          echo "========================================"
+
+          kubectl describe pods \
+            -n kube-system \
+            -l app.kubernetes.io/name=aws-load-balancer-controller || true
+
+          echo
+          echo "========================================"
+          echo "CONTROLLER LOGS"
+          echo "========================================"
+
+          kubectl logs \
+            -n kube-system \
+            -l app.kubernetes.io/name=aws-load-balancer-controller \
+            --all-containers=true \
+            --tail=200 || true
+
+          echo
+          echo "========================================"
+          echo "CONTROLLER EVENTS"
+          echo "========================================"
+
+          kubectl get events \
+            -n kube-system \
+            --sort-by='.lastTimestamp' \
+            | tail -100 || true
+
+          echo
+          echo "========================================"
+          echo "HELM RESULT"
+          echo "========================================"
+
+          if [ "$HELM_EXIT" -ne 0 ]; then
+            echo "AWS Load Balancer Controller installation FAILED."
+            echo "The diagnostics above contain the actual failure."
+            exit "$HELM_EXIT"
+          fi
+
+          echo "AWS Load Balancer Controller installed successfully."
+
+          kubectl rollout status deployment/aws-load-balancer-controller \
+            -n kube-system \
+            --timeout=60s
 
           kubectl get ingressclass alb
-
       - name: Deploy Retail Store
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         working-directory: .
