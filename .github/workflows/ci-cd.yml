@@ -376,6 +376,10 @@ jobs:
           CATALOG_USER=$(echo "$CATALOG_SECRET" | jq -r '.username')
           CATALOG_PASSWORD=$(echo "$CATALOG_SECRET" | jq -r '.password')
 
+          # Catalog uses go-envconfig v0.1.1, which expands literal $ characters.
+          # Escape $ as $$ so the application receives the original RDS password.
+          CATALOG_PASSWORD_ESCAPED="${CATALOG_PASSWORD//\$/\$\$}"
+
           ORDERS_USER=$(echo "$ORDERS_SECRET" | jq -r '.username')
           ORDERS_PASSWORD=$(echo "$ORDERS_SECRET" | jq -r '.password')
 
@@ -394,7 +398,7 @@ jobs:
           kubectl create secret generic catalog-db \
             -n retail-app \
             --from-literal=RETAIL_CATALOG_PERSISTENCE_USER="$CATALOG_USER" \
-            --from-literal=RETAIL_CATALOG_PERSISTENCE_PASSWORD="$CATALOG_PASSWORD" \
+            --from-literal=RETAIL_CATALOG_PERSISTENCE_PASSWORD="$CATALOG_PASSWORD_ESCAPED" \
             --dry-run=client \
             -o yaml | kubectl apply -f -
 
@@ -419,6 +423,7 @@ jobs:
           unset CATALOG_SECRET
           unset ORDERS_SECRET
           unset CATALOG_PASSWORD
+          unset CATALOG_PASSWORD_ESCAPED
           unset ORDERS_PASSWORD
 
           echo
