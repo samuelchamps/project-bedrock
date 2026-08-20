@@ -285,34 +285,249 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         working-directory: .
         run: |
-          kubectl apply -k kubernetes/retail-app/overlays/production
+          set -euo pipefail
+
+          echo "========================================"
+          echo "PREPARE RETAIL APPLICATION"
+          echo "========================================"
+
+          kubectl create namespace retail-app \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          echo
+          echo "========================================"
+          echo "MIGRATE LEGACY KUSTOMIZE DEPLOYMENT"
+          echo "========================================"
+
+          if ! helm status retail-store -n retail-app >/dev/null 2>&1; then
+            echo "No existing Helm release found."
+            echo "Removing legacy UI/Catalog resources before Helm takes ownership."
+
+            kubectl delete deployment catalog ui \
+              -n retail-app \
+              --ignore-not-found=true
+
+            kubectl delete service catalog ui \
+              -n retail-app \
+              --ignore-not-found=true
+
+            kubectl delete ingress retail-store \
+              -n retail-app \
+              --ignore-not-found=true
+          else
+            echo "Existing Helm release found. Legacy cleanup not required."
+          fi
+
+          echo
+          echo "========================================"
+          echo "DISCOVER MANAGED DATABASES"
+          echo "========================================"
+
+          CATALOG_ENDPOINT=$(aws rds describe-db-instances \
+            --db-instance-identifier project-bedrock-catalog-mysql \
+            --region us-east-1 \
+            --query 'DBInstances[0].Endpoint.Address' \
+            --output text)
+
+          ORDERS_ENDPOINT=$(aws rds describe-db-instances \
+            --db-instance-identifier project-bedrock-orders-postgres \
+            --region us-east-1 \
+            --query 'DBInstances[0].Endpoint.Address' \
+            --output text)
+
+          CATALOG_SECRET_ARN=$(aws rds describe-db-instances \
+            --db-instance-identifier project-bedrock-catalog-mysql \
+            --region us-east-1 \
+            --query 'DBInstances[0].MasterUserSecret.SecretArn' \
+            --output text)
+
+          ORDERS_SECRET_ARN=$(aws rds describe-db-instances \
+            --db-instance-identifier project-bedrock-orders-postgres \
+            --region us-east-1 \
+            --query 'DBInstances[0].MasterUserSecret.SecretArn' \
+            --output text)
+
+          test -n "$CATALOG_ENDPOINT"
+          test -n "$ORDERS_ENDPOINT"
+          test -n "$CATALOG_SECRET_ARN"
+          test -n "$ORDERS_SECRET_ARN"
+
+          echo "Catalog RDS endpoint discovered."
+          echo "Orders RDS endpoint discovered."
+
+          echo
+          echo "========================================"
+          echo "RETRIEVE DATABASE CREDENTIALS"
+          echo "========================================"
+
+          CATALOG_SECRET=$(aws secretsmanager get-secret-value \
+            --secret-id "$CATALOG_SECRET_ARN" \
+            --region us-east-1 \
+            --query SecretString \
+            --output text)
+
+          ORDERS_SECRET=$(aws secretsmanager get-secret-value \
+            --secret-id "$ORDERS_SECRET_ARN" \
+            --region us-east-1 \
+            --query SecretString \
+            --output text)
+
+          CATALOG_USER=$(echo "$CATALOG_SECRET" | jq -r '.username')
+          CATALOG_PASSWORD=$(echo "$CATALOG_SECRET" | jq -r '.password')
+
+          ORDERS_USER=$(echo "$ORDERS_SECRET" | jq -r '.username')
+          ORDERS_PASSWORD=$(echo "$ORDERS_SECRET" | jq -r '.password')
+
+          test "$CATALOG_USER" != "null"
+          test "$CATALOG_PASSWORD" != "null"
+          test "$ORDERS_USER" != "null"
+          test "$ORDERS_PASSWORD" != "null"
+
+          echo "Database credentials retrieved securely from AWS Secrets Manager."
+
+          echo
+          echo "========================================"
+          echo "CREATE KUBERNETES DATABASE SECRETS"
+          echo "========================================"
+
+          kubectl create secret generic catalog-db \
+            -n retail-app \
+            --from-literal=RETAIL_CATALOG_PERSISTENCE_USER="$CATALOG_USER" \
+            --from-literal=RETAIL_CATALOG_PERSISTENCE_PASSWORD="$CATALOG_PASSWORD" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          kubectl create secret generic orders-db \
+            -n retail-app \
+            --from-literal=RETAIL_ORDERS_PERSISTENCE_USERNAME="$ORDERS_USER" \
+            --from-literal=RETAIL_ORDERS_PERSISTENCE_PASSWORD="$ORDERS_PASSWORD" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          RABBITMQ_PASSWORD=$(openssl rand -hex 16)
+
+          kubectl create secret generic orders-rabbitmq \
+            -n retail-app \
+            --from-literal=RETAIL_ORDERS_MESSAGING_RABBITMQ_USERNAME="bedrock" \
+            --from-literal=RETAIL_ORDERS_MESSAGING_RABBITMQ_PASSWORD="$RABBITMQ_PASSWORD" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          unset RABBITMQ_PASSWORD
+
+          unset CATALOG_SECRET
+          unset ORDERS_SECRET
+          unset CATALOG_PASSWORD
+          unset ORDERS_PASSWORD
+
+          echo
+          echo "========================================"
+          echo "BUILD HELM DEPENDENCIES"
+          echo "========================================"
+
+          helm dependency build retail-store-sample-app/src/app/chart
+
+          echo
+          echo "========================================"
+          echo "DEPLOY FULL RETAIL STORE"
+          echo "========================================"
+
+          helm upgrade --install retail-store \
+            retail-store-sample-app/src/app/chart \
+            --namespace retail-app \
+            --create-namespace \
+            -f kubernetes/retail-app/values-production.yaml \
+            --set-string catalog.app.persistence.endpoint="${CATALOG_ENDPOINT}:3306" \
+            --set-string orders.app.persistence.endpoint="${ORDERS_ENDPOINT}:5432" \
+            --wait \
+            --timeout 15m
+
+          echo
+          echo "========================================"
+          echo "APPLY ALB INGRESS"
+          echo "========================================"
+
+          kubectl apply \
+            -n retail-app \
+            -f kubernetes/retail-app/base/ingress.yaml
 
       - name: Verify Retail Store
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         working-directory: .
         run: |
-          kubectl rollout status deployment/catalog \
+          set -euo pipefail
+
+          echo "========================================"
+          echo "APPLICATION ROLLOUTS"
+          echo "========================================"
+
+          for deployment in \
+            carts \
+            catalog \
+            checkout \
+            checkout-redis \
+            orders \
+            ui
+          do
+            echo "Checking deployment: $deployment"
+
+            kubectl rollout status \
+              deployment/"$deployment" \
+              -n retail-app \
+              --timeout=5m
+          done
+
+          echo "Checking RabbitMQ StatefulSet"
+
+          kubectl rollout status \
+            statefulset/orders-rabbitmq \
             -n retail-app \
             --timeout=5m
 
-          kubectl rollout status deployment/ui \
-            -n retail-app \
-            --timeout=5m
+          echo
+          echo "========================================"
+          echo "ALL RETAIL APP PODS"
+          echo "========================================"
 
+          kubectl get pods -n retail-app -o wide
+
+          echo
           echo "========================================"
-          echo "RETAIL APP"
+          echo "ALL RETAIL APP SERVICES"
           echo "========================================"
-          kubectl get pods -n retail-app
+
+          kubectl get services -n retail-app
+
+          echo
+          echo "========================================"
+          echo "VERIFY MANAGED DATABASE ARCHITECTURE"
+          echo "========================================"
+
+          DB_PODS=$(kubectl get pods \
+            -n retail-app \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+            | grep -Ei 'mysql|postgres|dynamodb' || true)
+
+          if [ -n "$DB_PODS" ]; then
+            echo "ERROR: In-cluster managed database replacement detected:"
+            echo "$DB_PODS"
+            exit 1
+          fi
+
+          echo "No MySQL, PostgreSQL, or DynamoDB database pods found in-cluster."
+          echo "Managed AWS data-layer validation passed."
 
           echo
           echo "========================================"
           echo "INGRESS"
           echo "========================================"
+
           kubectl get ingress -n retail-app
 
           echo
           echo "========================================"
-          echo "ALB ADDRESS"
+          echo "WAIT FOR ALB"
           echo "========================================"
 
           for i in {1..60}; do
@@ -322,8 +537,32 @@ jobs:
               2>/dev/null || true)
 
             if [ -n "$ADDRESS" ]; then
-              echo "$ADDRESS"
-              exit 0
+              echo "ALB hostname: $ADDRESS"
+
+              echo
+              echo "========================================"
+              echo "HTTP TEST"
+              echo "========================================"
+
+              for j in {1..30}; do
+                HTTP_CODE=$(curl \
+                  -s \
+                  -o /dev/null \
+                  -w '%{http_code}' \
+                  "http://$ADDRESS/" || true)
+
+                echo "HTTP attempt $j/30: $HTTP_CODE"
+
+                if [ "$HTTP_CODE" = "200" ]; then
+                  echo "Retail Store returned HTTP 200."
+                  exit 0
+                fi
+
+                sleep 10
+              done
+
+              echo "ERROR: ALB exists but application did not return HTTP 200."
+              exit 1
             fi
 
             echo "Waiting for ALB... ($i/60)"
@@ -331,5 +570,6 @@ jobs:
           done
 
           echo "ERROR: ALB address was not created."
+
           kubectl describe ingress retail-store -n retail-app
           exit 1

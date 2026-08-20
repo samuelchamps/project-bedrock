@@ -81,3 +81,27 @@ resource "aws_db_instance" "orders_postgres" {
     }
   )
 }
+
+resource "aws_iam_role_policy" "github_actions_rds_secrets" {
+  name = "project-bedrock-github-actions-rds-secrets"
+  role = "ProjectBedrockGitHubActionsRole"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+
+        Resource = [
+          aws_db_instance.catalog_mysql.master_user_secret[0].secret_arn,
+          aws_db_instance.orders_postgres.master_user_secret[0].secret_arn
+        ]
+      }
+    ]
+  })
+}
