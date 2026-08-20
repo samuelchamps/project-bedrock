@@ -428,6 +428,20 @@ jobs:
 
           echo
           echo "========================================"
+          echo "REFRESH SECRET-DEPENDENT WORKLOADS"
+          echo "========================================"
+
+          if kubectl get deployment catalog -n retail-app >/dev/null 2>&1; then
+            echo "Restarting Catalog so it consumes the latest RDS secret."
+            kubectl rollout restart deployment/catalog -n retail-app
+
+            kubectl rollout status deployment/catalog \
+              -n retail-app \
+              --timeout=5m
+          fi
+
+          echo
+          echo "========================================"
           echo "BUILD HELM DEPENDENCIES"
           echo "========================================"
 
