@@ -27,7 +27,7 @@ module "eks" {
 
   project_name = local.project_name
 
-  kubernetes_version = "1.33"
+  kubernetes_version = "1.34"
 
   vpc_id = module.vpc.vpc_id
 
